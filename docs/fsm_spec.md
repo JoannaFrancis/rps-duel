@@ -14,7 +14,7 @@ stateDiagram-v2
     INIT --> WAITING_FOR_PLAYERS: server starts
 
     WAITING_FOR_PLAYERS --> LOBBY_WAIT: Player_1 connects
-    WAITING_FOR_PLAYERS --> LOBBY_WAIT: Player_1 disconnects
+    LOBBY_WAIT --> WAITING_FOR_PLAYERS: Player_1 disconnects
     LOBBY_WAIT --> GAME_START: Player_2 connects
 
     GAME_START --> WAITING_FOR_MOVES: round begins
