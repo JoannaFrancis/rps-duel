@@ -12,12 +12,15 @@
 stateDiagram-v2
     [*] --> INIT
     INIT --> WAITING_FOR_PLAYERS: server starts
-    WAITING_FOR_PLAYERS --> LOBBY_WAIT: Player_1 connects
-    LOBBY_WAIT --> GAME_START: Player_2 connects
-    GAME_START --> WAITING_FOR_MOVES: round begins
 
-    WAITING_FOR_MOVES --> WAITING_FOR_MOVES: invalid message
-    WAITING_FOR_MOVES --> EVALUATE_ROUND: both moves received
+    WAITING_FOR_PLAYERS --> LOBBY_WAIT: Player_1 connects
+    WAITING_FOR_PLAYERS --> LOBBY_WAIT: Player_1 disconnects
+    LOBBY_WAIT --> GAME_START: Player_2 connects
+
+    GAME_START --> WAITING_FOR_MOVES: round begins
+    WAITING_FOR_MOVES --> WAITING_FOR_MOVES: first valid move stored/ send Move_ACK
+    WAITING_FOR_MOVES --> WAITING_FOR_MOVES: invalid message/ send ERROR    
+    WAITING_FOR_MOVES --> EVALUATE_ROUND: second valid move recieved
     WAITING_FOR_MOVES --> GAME_OVER: disconnect or forfeit
 
     EVALUATE_ROUND --> BROADCAST_RESULT: result determined
