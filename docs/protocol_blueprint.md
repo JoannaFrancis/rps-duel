@@ -240,3 +240,84 @@ The server sends STATE_UPDATE after both valid moves have been received and the 
 }
 ```
 ---
+## Socket Lifecycle and Connection Error Handling
+
+### Connection Establishment
+
+The server creates a TCP listening socket, binds to `0.0.0.0` on
+the configured port, and listens for incoming connections.
+
+The listening socket and accepted client sockets use nonblocking
+mode and are registered with the selector. Each client connection
+has its own incoming buffer and outgoing queue.
+
+After connecting, a client sends `CONNECT`. The server validates
+the message before assigning a player ID and adding the player
+to the lobby.
+
+### Receiving Data and Detecting EOF
+
+When a client socket is readable, the server calls `recv()`.
+
+- **Nonempty bytes:** Append the bytes to the connection's incoming
+  buffer and process complete newline-delimited JSON messages.
+- **Zero bytes (`b""`):** The peer has closed its sending side of
+  the TCP connection. This is EOF, not an empty application
+  message. The game server treats it as a disconnect.
+- **`BlockingIOError`:** No data is currently available. Keep the
+  connection registered and return to the event loop.
+
+An incomplete JSON message remaining in the buffer when EOF
+occurs is discarded. It cannot be processed as a valid move.
+
+### Socket Exception Handling
+
+The server handles socket exceptions for each connection so one
+client's failure does not crash the server.
+
+| Exception | Server Response |
+|---|---|
+| `ConnectionResetError` | Treat the client as disconnected because the connection was reset. |
+| `BrokenPipeError` | Treat the client as disconnected because a send failed on an unusable connection. |
+| `BlockingIOError` | Preserve buffered data and retry when the selector reports readiness. |
+| Other connection-related `OSError` exceptions | Record the error and close the affected connection. |
+
+`BlockingIOError` is an expected condition for nonblocking
+sockets and does not indicate a disconnect.
+
+A successful send may transmit only part of a message. Unsent
+bytes remain in the outgoing queue until a later write event.
+
+A silent network outage may not immediately produce EOF or an
+exception. It is handled once detected by TCP or an explicitly
+configured connection timeout policy.
+
+### Effect on Game State
+
+All disconnect paths use the same game-state handling:
+
+- **Before match initialization:** Remove the departing player
+  and free the lobby slot. No forfeit is recorded.
+- **During an active match:** Record a forfeit, declare the
+  opponent the winner, and queue `GAME_OVER` for any reachable
+  client.
+- **After the match ends:** Clean up the connection without
+  changing the recorded winner or scores.
+
+A disconnect detected through EOF or a socket exception does
+not require a `DISCONNECT` message.
+
+A connection already handled as disconnected cannot trigger a
+second forfeit.
+
+### Connection Teardown
+
+The server unregisters the disconnected socket from the selector,
+closes it, and removes its connection record and buffers.
+
+For a reachable client receiving final messages, the server allows
+a bounded time for queued output to drain before closing the
+socket. Delivery to a disconnected client cannot be guaranteed.
+
+The listening socket remains available while the server is
+running and is closed during server shutdown.
